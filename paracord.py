@@ -35,7 +35,7 @@ except ImportError:
     print("Install it with: pip3 install requests")
     sys.exit(1)
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 
 # Console colors (ANSI escape codes, works on most terminals)
 class Colors:
@@ -54,6 +54,8 @@ DISCORD_API_BASE = "https://discord.com/api/v9"
 PROGRESS_FILE = ".paracord_progress.json"
 LOG_FILE = "paracord.log"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+MEOW_TEXT = "Meow Meow Meow Meow"
+MEOW_MODES = ("off", "edit_and_delete", "edit_only")
 
 class ProgressBar:
     """Simple progress bar for terminal display"""
@@ -91,6 +93,7 @@ class Paracord:
         # Statistics
         self.stats = {
             'deleted': 0,
+            'edited': 0,
             'failed': 0,
             'skipped': 0,
             'rate_limited': 0,
@@ -487,6 +490,64 @@ class Paracord:
             self.logger.error(f"Delete request failed: {e}")
             return 'RETRY' if attempt < 3 else 'FAILED'
     
+    def edit_message(self, channel_id: str, message_id: str, content: str,
+                     attempt: int = 1) -> str:
+        """Edit a single message's content.
+        
+        Returns:
+            'OK'     - Successfully edited
+            'GHOST'  - Message doesn't exist (404)
+            'SKIP'   - Cannot edit (archived thread, no permissions)
+            'RETRY'  - Rate limited, should retry
+            'FAILED' - Permanent failure
+        """
+        
+        url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
+        payload = {'content': content}
+        
+        try:
+            response = self.session.patch(url, json=payload, timeout=10)
+            
+            if response.status_code == 200:
+                return 'OK'
+            
+            elif response.status_code == 429:
+                retry_after = response.json().get('retry_after', 3)
+                wait_time = retry_after * 2
+                self.stats['rate_limited'] += 1
+                self.logger.warning(f"Rate limited on edit, waiting {wait_time}s (retry_after={retry_after}s)")
+                print(f"{Colors.YELLOW}Rate limited - waiting {wait_time}s...{Colors.ENDC}")
+                time.sleep(wait_time)
+                return 'RETRY'
+            
+            elif response.status_code == 404:
+                self.logger.debug(f"Message {message_id} not found for edit (ghost)")
+                return 'GHOST'
+            
+            elif response.status_code == 400:
+                try:
+                    error_data = response.json()
+                    if error_data.get('code') == 50083:
+                        self.logger.warning(f"Message {message_id} in archived thread, cannot edit")
+                        return 'SKIP'
+                except (ValueError, KeyError):
+                    pass
+                self.logger.error(f"Edit failed with status 400: {response.text}")
+                return 'FAILED'
+            
+            elif response.status_code == 403:
+                error_data = response.json()
+                self.logger.warning(f"Cannot edit message {message_id}: {error_data}")
+                return 'SKIP'
+            
+            else:
+                self.logger.error(f"Edit failed with status {response.status_code}: {response.text}")
+                return 'FAILED'
+        
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Edit request failed: {e}")
+            return 'RETRY' if attempt < 3 else 'FAILED'
+    
     def process_target(self, target: Dict, dry_run: bool = False):
         """Process a single channel/DM target using cursor-based pagination.
         
@@ -611,10 +672,16 @@ class Paracord:
                 max_id_cursor = str(oldest_id - 1)
                 offset = 0
             else:
-                # Actually delete
-                progress = ProgressBar(len(messages), prefix='Deleting')
+                # Actually process messages (edit and/or delete)
+                meow_mode = self.config['settings'].get('meow_mode', 'off')
+                if meow_mode != 'off':
+                    prefix_label = 'Meowing' if meow_mode == 'edit_only' else 'Meowing & deleting'
+                else:
+                    prefix_label = 'Deleting'
+                progress = ProgressBar(len(messages), prefix=prefix_label)
                 
                 deleted_in_batch = 0
+                edited_in_batch = 0
                 skipped_in_batch = 0
                 oldest_processed_id = None
                 
@@ -630,8 +697,51 @@ class Paracord:
                     if oldest_processed_id is None or msg_id_int < oldest_processed_id:
                         oldest_processed_id = msg_id_int
                     
-                    # Attempt deletion with retries
+                    # Meow mode: edit message content before deletion
                     was_ghost = False
+                    if meow_mode != 'off':
+                        # Skip edit if message is already meowed
+                        if msg.get('content') != MEOW_TEXT:
+                            edit_success = False
+                            for attempt in range(1, max_retries + 1):
+                                edit_result = self.edit_message(channel_id, message_id, MEOW_TEXT, attempt)
+                                
+                                if edit_result == 'OK':
+                                    self.stats['edited'] += 1
+                                    edited_in_batch += 1
+                                    edit_success = True
+                                    break
+                                elif edit_result == 'GHOST':
+                                    self.stats['ghosts'] += 1
+                                    deleted_in_batch += 1
+                                    was_ghost = True
+                                    break
+                                elif edit_result in ('SKIP', 'FAILED'):
+                                    break
+                                elif edit_result == 'RETRY':
+                                    if attempt < max_retries:
+                                        time.sleep(1)
+                                        continue
+                                    break
+                            
+                            # If ghost, skip deletion (message doesn't exist)
+                            if was_ghost:
+                                progress.update(i + 1)
+                                continue
+                            
+                            # Delay after edit before next API call
+                            if edit_success:
+                                time.sleep(self.config['settings']['delete_delay'])
+                    
+                    # In edit_only mode, skip deletion entirely
+                    if meow_mode == 'edit_only':
+                        progress.update(i + 1)
+                        # Still need a delay between edits
+                        if not was_ghost:
+                            time.sleep(self.config['settings']['delete_delay'])
+                        continue
+                    
+                    # Attempt deletion with retries
                     for attempt in range(1, max_retries + 1):
                         result = self.delete_message(channel_id, message_id, attempt)
                         
@@ -677,16 +787,25 @@ class Paracord:
                     offset = 0  # Reset offset since cursor handles pagination
                     self.logger.info(
                         f"Cursor advanced: max_id={max_id_cursor} "
-                        f"(deleted={deleted_in_batch}, skipped={skipped_in_batch})"
+                        f"(edited={edited_in_batch}, deleted={deleted_in_batch}, skipped={skipped_in_batch})"
                     )
                 
-                print(f"{Colors.CYAN}Batch done: {deleted_in_batch} deleted, {skipped_in_batch} skipped{Colors.ENDC}")
+                # Build batch summary
+                parts = []
+                if edited_in_batch:
+                    parts.append(f"{edited_in_batch} meowed")
+                if deleted_in_batch:
+                    parts.append(f"{deleted_in_batch} deleted")
+                if skipped_in_batch:
+                    parts.append(f"{skipped_in_batch} skipped")
+                print(f"{Colors.CYAN}Batch done: {', '.join(parts)}{Colors.ENDC}")
             
             # Delay before next search
             print(f"{Colors.CYAN}Waiting {self.config['settings']['search_delay']}s before next search...{Colors.ENDC}")
             time.sleep(self.config['settings']['search_delay'])
     
-    def run_batch(self, config_file: str, dry_run: bool = False, resume: bool = False, skip_confirm: bool = False):
+    def run_batch(self, config_file: str, dry_run: bool = False, resume: bool = False,
+                  skip_confirm: bool = False, meow_mode: Optional[str] = None):
         """Run batch deletion from config file"""
         
         print(f"\n{Colors.HEADER}{'='*60}{Colors.ENDC}")
@@ -698,6 +817,12 @@ class Paracord:
             config = json.load(f)
         
         self.config = config
+        
+        # CLI --meow flag overrides config file meow_mode
+        if meow_mode is not None:
+            config['settings']['meow_mode'] = meow_mode
+        # Ensure meow_mode has a default
+        config['settings'].setdefault('meow_mode', 'off')
         
         # Load token
         self.token = self.load_token()
@@ -729,12 +854,22 @@ class Paracord:
         print(f"  Delete delay: {config['settings']['delete_delay']}s")
         print(f"  Skip pinned: {config['settings']['skip_pinned']}")
         
+        meow_mode = config['settings'].get('meow_mode', 'off')
+        if meow_mode != 'off':
+            print(f"  Meow mode: {Colors.YELLOW}{meow_mode}{Colors.ENDC}")
+        
         if dry_run:
             print(f"{Colors.YELLOW}  DRY RUN MODE: No messages will be deleted{Colors.ENDC}")
         
         # Confirm
         if not dry_run and not skip_confirm:
-            print(f"\n{Colors.YELLOW}This will delete messages from {len(targets)} channels/DMs.{Colors.ENDC}")
+            if meow_mode == 'edit_only':
+                action_desc = f"edit messages to \"{MEOW_TEXT}\" in"
+            elif meow_mode == 'edit_and_delete':
+                action_desc = f"edit messages to \"{MEOW_TEXT}\" then delete them from"
+            else:
+                action_desc = "delete messages from"
+            print(f"\n{Colors.YELLOW}This will {action_desc} {len(targets)} channels/DMs.{Colors.ENDC}")
             print(f"{Colors.YELLOW}This action cannot be undone!{Colors.ENDC}")
             confirm = input("Continue? (yes/no): ").lower().strip()
             if confirm != 'yes':
@@ -787,6 +922,8 @@ class Paracord:
         seconds = int(duration.total_seconds() % 60)
         
         print(f"{Colors.BOLD}Duration:{Colors.ENDC} {hours}h {minutes}m {seconds}s")
+        if self.stats['edited']:
+            print(f"{Colors.YELLOW}Edited (meowed):{Colors.ENDC} {self.stats['edited']}")
         print(f"{Colors.GREEN}Deleted:{Colors.ENDC} {self.stats['deleted']}")
         print(f"{Colors.YELLOW}Ghosts:{Colors.ENDC} {self.stats['ghosts']} (already-deleted stale index entries)")
         print(f"{Colors.YELLOW}Skipped:{Colors.ENDC} {self.stats['skipped']}")
@@ -818,6 +955,12 @@ Examples:
   
   # Skip confirmation prompt
   python3 paracord.py --config config.json --yes
+  
+  # Meow mode: edit all messages to "Meow Meow Meow Meow" then delete
+  python3 paracord.py --config config.json --meow
+  
+  # Meow mode: edit only (leave messages standing as meows)
+  python3 paracord.py --config config.json --meow edit_only
         """
     )
     
@@ -829,6 +972,10 @@ Examples:
     parser.add_argument('--resume', '-r', action='store_true', help='Resume from saved progress')
     parser.add_argument('--verify-auth', action='store_true', help='Verify token and exit')
     parser.add_argument('--yes', '-y', action='store_true', help='Skip confirmation prompt')
+    parser.add_argument('--meow', nargs='?', const='edit_and_delete', default=None,
+                        choices=['edit_and_delete', 'edit_only'],
+                        help='Meow mode: edit messages to "Meow Meow Meow Meow" before deleting. '
+                             'Use "edit_only" to leave meowed messages standing (default: edit_and_delete)')
     
     args = parser.parse_args()
     
@@ -865,7 +1012,8 @@ Examples:
     
     # Batch mode
     if args.config:
-        paracord.run_batch(args.config, dry_run=args.dry_run, resume=args.resume, skip_confirm=args.yes)
+        paracord.run_batch(args.config, dry_run=args.dry_run, resume=args.resume,
+                           skip_confirm=args.yes, meow_mode=args.meow)
         sys.exit(0)
     
     # No action specified
