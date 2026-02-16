@@ -1,0 +1,45 @@
+{
+  "_comment": "Configuration template for Paracord. Run 'python3 paracord.py --discover' to auto-generate this file.",
+
+  "auth_token_env": "DISCORD_TOKEN",
+  "author_id": "YOUR_USER_ID_HERE",
+
+  "settings": {
+    "search_delay": 10,
+    "delete_delay": 1,
+    "skip_pinned": true,
+    "max_retries": 3,
+    "dry_run": false
+  },
+
+  "targets": [
+    {
+      "_example": "Server channel",
+      "type": "guild",
+      "guild_id": "123456789012345678",
+      "guild_name": "Example Server",
+      "channel_id": "123456789012345678",
+      "channel_name": "general"
+    },
+    {
+      "_example": "Direct Message",
+      "type": "dm",
+      "channel_id": "123456789012345678",
+      "recipient_name": "SomeUser"
+    },
+    {
+      "_example": "Group DM",
+      "type": "group_dm",
+      "channel_id": "123456789012345678",
+      "group_name": "Squad Chat"
+    }
+  ],
+
+  "_settings_reference": {
+    "search_delay": "Seconds between message searches (10 is proven safe, 30-40 is conservative)",
+    "delete_delay": "Seconds between deletions (1 is proven safe, 3 is conservative)",
+    "skip_pinned": "Skip pinned messages (true recommended)",
+    "max_retries": "Max retry attempts for failed deletions",
+    "dry_run": "Preview mode - shows what would be deleted without deleting"
+  }
+}

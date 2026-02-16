@@ -1,0 +1,38 @@
+# Environment and secrets
+.env
+*.env
+.env.*
+!.env.example
+
+# Config with personal data
+config.json
+
+# Progress tracking
+.paracord_progress.json
+*progress*.json
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
