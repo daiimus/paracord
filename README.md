@@ -1,5 +1,9 @@
 # Paracord
 
+<p align="center">
+  <img src="logo.svg" alt="Paracord logo" width="200">
+</p>
+
 CLI tool for bulk-deleting your Discord messages across servers, DMs, and group DMs.
 
 Built for privacy-conscious users who want to clean up their Discord history. Handles 100K+ messages unattended with progress persistence and automatic rate limit handling.

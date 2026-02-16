@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="400" height="500">
+  <defs>
+    <linearGradient id="chute" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6b6b"/>
+      <stop offset="50%" style="stop-color:#ee5a24"/>
+      <stop offset="100%" style="stop-color:#ff6b6b"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#2c3e50"/>
+      <stop offset="100%" style="stop-color:#3498db"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="500" rx="20" fill="url(#sky)"/>
+
+  <!-- Stars -->
+  <circle cx="50" cy="40" r="2" fill="white" opacity="0.6"/>
+  <circle cx="120" cy="25" r="1.5" fill="white" opacity="0.4"/>
+  <circle cx="300" cy="50" r="2" fill="white" opacity="0.7"/>
+  <circle cx="350" cy="30" r="1.5" fill="white" opacity="0.5"/>
+  <circle cx="80" cy="80" r="1" fill="white" opacity="0.3"/>
+  <circle cx="250" cy="20" r="1.5" fill="white" opacity="0.5"/>
+  <circle cx="370" cy="90" r="1" fill="white" opacity="0.4"/>
+  <circle cx="30" cy="120" r="1.5" fill="white" opacity="0.3"/>
+
+  <!-- Parachute canopy -->
+  <ellipse cx="200" cy="100" rx="130" ry="80" fill="url(#chute)" opacity="0.9"/>
+  <!-- Canopy panels/segments -->
+  <path d="M200,20 Q200,100 200,180" stroke="#c0392b" stroke-width="2" fill="none" opacity="0.5"/>
+  <path d="M200,20 Q140,100 130,180" stroke="#c0392b" stroke-width="1.5" fill="none" opacity="0.4"/>
+  <path d="M200,20 Q260,100 270,180" stroke="#c0392b" stroke-width="1.5" fill="none" opacity="0.4"/>
+  <!-- Canopy edge highlight -->
+  <ellipse cx="200" cy="100" rx="130" ry="80" fill="none" stroke="#fff" stroke-width="1" opacity="0.2"/>
+
+  <!-- Parachute cords (left and right) -->
+  <line x1="90" y1="155" x2="170" y2="280" stroke="#ddd" stroke-width="1.5" opacity="0.7"/>
+  <line x1="130" y1="170" x2="180" y2="280" stroke="#ddd" stroke-width="1.5" opacity="0.7"/>
+  <line x1="310" y1="155" x2="230" y2="280" stroke="#ddd" stroke-width="1.5" opacity="0.7"/>
+  <line x1="270" y1="170" x2="220" y2="280" stroke="#ddd" stroke-width="1.5" opacity="0.7"/>
+  <!-- Center cords -->
+  <line x1="200" y1="180" x2="200" y2="280" stroke="#ddd" stroke-width="1.5" opacity="0.7"/>
+
+  <!-- Cat body -->
+  <ellipse cx="200" cy="320" rx="45" ry="55" fill="#2d2d2d"/>
+
+  <!-- Cat head -->
+  <circle cx="200" cy="275" r="35" fill="#333"/>
+
+  <!-- Cat ears -->
+  <polygon points="172,248 160,210 185,240" fill="#333"/>
+  <polygon points="228,248 240,210 215,240" fill="#333"/>
+  <!-- Inner ears -->
+  <polygon points="174,246 165,218 184,240" fill="#ff9ff3" opacity="0.6"/>
+  <polygon points="226,246 235,218 216,240" fill="#ff9ff3" opacity="0.6"/>
+
+  <!-- Cat eyes -->
+  <ellipse cx="186" cy="270" rx="8" ry="9" fill="#2ecc71"/>
+  <ellipse cx="214" cy="270" rx="8" ry="9" fill="#2ecc71"/>
+  <!-- Pupils -->
+  <ellipse cx="186" cy="270" rx="3.5" ry="7" fill="#111"/>
+  <ellipse cx="214" cy="270" rx="3.5" ry="7" fill="#111"/>
+  <!-- Eye shine -->
+  <circle cx="189" cy="267" r="2.5" fill="white" opacity="0.7"/>
+  <circle cx="217" cy="267" r="2.5" fill="white" opacity="0.7"/>
+
+  <!-- Cat nose -->
+  <polygon points="200,280 196,285 204,285" fill="#ff9ff3"/>
+
+  <!-- Cat mouth -->
+  <path d="M196,285 Q192,292 186,290" stroke="#555" stroke-width="1.5" fill="none"/>
+  <path d="M204,285 Q208,292 214,290" stroke="#555" stroke-width="1.5" fill="none"/>
+
+  <!-- Whiskers -->
+  <line x1="155" y1="278" x2="182" y2="282" stroke="#888" stroke-width="1" opacity="0.6"/>
+  <line x1="155" y1="285" x2="182" y2="285" stroke="#888" stroke-width="1" opacity="0.6"/>
+  <line x1="155" y1="292" x2="182" y2="288" stroke="#888" stroke-width="1" opacity="0.6"/>
+  <line x1="245" y1="278" x2="218" y2="282" stroke="#888" stroke-width="1" opacity="0.6"/>
+  <line x1="245" y1="285" x2="218" y2="285" stroke="#888" stroke-width="1" opacity="0.6"/>
+  <line x1="245" y1="292" x2="218" y2="288" stroke="#888" stroke-width="1" opacity="0.6"/>
+
+  <!-- Cat paws (spread out like skydiving) -->
+  <!-- Left arm/paw -->
+  <path d="M160,310 Q140,300 125,310" stroke="#2d2d2d" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <circle cx="122" cy="312" r="8" fill="#2d2d2d"/>
+  <ellipse cx="118" cy="314" rx="3" ry="2" fill="#ff9ff3" opacity="0.5"/>
+  <!-- Right arm/paw -->
+  <path d="M240,310 Q260,300 275,310" stroke="#2d2d2d" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <circle cx="278" cy="312" r="8" fill="#2d2d2d"/>
+  <ellipse cx="282" cy="314" rx="3" ry="2" fill="#ff9ff3" opacity="0.5"/>
+
+  <!-- Cat legs (dangling) -->
+  <path d="M175,365 Q168,390 172,400" stroke="#2d2d2d" stroke-width="11" fill="none" stroke-linecap="round"/>
+  <circle cx="173" cy="402" r="7" fill="#2d2d2d"/>
+  <path d="M225,365 Q232,390 228,400" stroke="#2d2d2d" stroke-width="11" fill="none" stroke-linecap="round"/>
+  <circle cx="227" cy="402" r="7" fill="#2d2d2d"/>
+
+  <!-- Cat tail (curling to the side) -->
+  <path d="M230,360 Q270,370 280,350 Q290,330 275,320" stroke="#2d2d2d" stroke-width="8" fill="none" stroke-linecap="round"/>
+
+  <!-- Title text -->
+  <text x="200" y="460" text-anchor="middle" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="bold" letter-spacing="4">PARACORD</text>
+  <text x="200" y="482" text-anchor="middle" fill="#bbb" font-family="Arial, Helvetica, sans-serif" font-size="12" letter-spacing="2">DISCORD MESSAGE CLEANUP</text>
+</svg>
