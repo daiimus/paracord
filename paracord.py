@@ -35,7 +35,7 @@ except ImportError:
     print("Install it with: pip3 install requests")
     sys.exit(1)
 
-__version__ = "3.1.0"
+__version__ = "3.2.0"
 
 # Console colors (ANSI escape codes, works on most terminals)
 class Colors:
@@ -353,6 +353,7 @@ class Paracord:
                 "search_delay": 10,
                 "delete_delay": 1,
                 "skip_pinned": True,
+                "skip_meowed": False,
                 "max_retries": 3,
                 "dry_run": False
             },
@@ -624,6 +625,9 @@ class Paracord:
                         # Filter pinned if configured
                         if self.config['settings']['skip_pinned'] and msg.get('pinned'):
                             continue
+                        # Skip meowed messages if configured
+                        if self.config['settings'].get('skip_meowed') and msg.get('content') == MEOW_TEXT:
+                            continue
                         messages.append(msg)
             
             if not messages and not all_hit_messages:
@@ -650,7 +654,7 @@ class Paracord:
                 oldest_id = min(int(msg['id']) for msg in all_hit_messages)
                 max_id_cursor = str(oldest_id - 1)
                 offset = 0
-                print(f"{Colors.YELLOW}All messages in batch were filtered (pinned), advancing cursor...{Colors.ENDC}")
+                print(f"{Colors.YELLOW}All messages in batch were filtered (pinned/meowed), advancing cursor...{Colors.ENDC}")
                 time.sleep(self.config['settings']['search_delay'])
                 continue
             
@@ -805,7 +809,8 @@ class Paracord:
             time.sleep(self.config['settings']['search_delay'])
     
     def run_batch(self, config_file: str, dry_run: bool = False, resume: bool = False,
-                  skip_confirm: bool = False, meow_mode: Optional[str] = None):
+                  skip_confirm: bool = False, meow_mode: Optional[str] = None,
+                  skip_meowed: Optional[bool] = None):
         """Run batch deletion from config file"""
         
         print(f"\n{Colors.HEADER}{'='*60}{Colors.ENDC}")
@@ -823,6 +828,12 @@ class Paracord:
             config['settings']['meow_mode'] = meow_mode
         # Ensure meow_mode has a default
         config['settings'].setdefault('meow_mode', 'off')
+        
+        # CLI --skip-meowed flag overrides config file skip_meowed
+        if skip_meowed is not None:
+            config['settings']['skip_meowed'] = skip_meowed
+        # Ensure skip_meowed has a default
+        config['settings'].setdefault('skip_meowed', False)
         
         # Load token
         self.token = self.load_token()
@@ -853,6 +864,8 @@ class Paracord:
         print(f"  Search delay: {config['settings']['search_delay']}s")
         print(f"  Delete delay: {config['settings']['delete_delay']}s")
         print(f"  Skip pinned: {config['settings']['skip_pinned']}")
+        if config['settings'].get('skip_meowed'):
+            print(f"  Skip meowed: {Colors.YELLOW}True{Colors.ENDC} (messages containing \"{MEOW_TEXT}\" will be preserved)")
         
         meow_mode = config['settings'].get('meow_mode', 'off')
         if meow_mode != 'off':
@@ -959,8 +972,11 @@ Examples:
   # Meow mode: edit all messages to "Meow Meow Meow Meow" then delete
   python3 paracord.py --config config.json --meow
   
-  # Meow mode: edit only (leave messages standing as meows)
-  python3 paracord.py --config config.json --meow edit_only
+   # Meow mode: edit only (leave messages standing as meows)
+   python3 paracord.py --config config.json --meow edit_only
+   
+   # Delete all messages except meowed ones (preserve meow'd messages)
+   python3 paracord.py --config config.json --skip-meowed
         """
     )
     
@@ -976,6 +992,8 @@ Examples:
                         choices=['edit_and_delete', 'edit_only'],
                         help='Meow mode: edit messages to "Meow Meow Meow Meow" before deleting. '
                              'Use "edit_only" to leave meowed messages standing (default: edit_and_delete)')
+    parser.add_argument('--skip-meowed', action='store_true', default=None,
+                        help='Skip messages already containing "Meow Meow Meow Meow" (preserve meowed messages)')
     
     args = parser.parse_args()
     
@@ -985,6 +1003,7 @@ Examples:
             "search_delay": 10,
             "delete_delay": 1,
             "skip_pinned": True,
+            "skip_meowed": False,
             "max_retries": 3
         }
     }
@@ -1013,7 +1032,8 @@ Examples:
     # Batch mode
     if args.config:
         paracord.run_batch(args.config, dry_run=args.dry_run, resume=args.resume,
-                           skip_confirm=args.yes, meow_mode=args.meow)
+                           skip_confirm=args.yes, meow_mode=args.meow,
+                           skip_meowed=args.skip_meowed)
         sys.exit(0)
     
     # No action specified

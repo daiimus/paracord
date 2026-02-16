@@ -8,6 +8,7 @@
     "search_delay": 10,
     "delete_delay": 1,
     "skip_pinned": true,
+    "skip_meowed": false,
     "max_retries": 3,
     "dry_run": false,
     "meow_mode": "off"
@@ -40,6 +41,7 @@
     "search_delay": "Seconds between message searches (10 is proven safe, 30-40 is conservative)",
     "delete_delay": "Seconds between deletions (1 is proven safe, 3 is conservative)",
     "skip_pinned": "Skip pinned messages (true recommended)",
+    "skip_meowed": "Skip messages containing 'Meow Meow Meow Meow' (preserve meowed messages)",
     "max_retries": "Max retry attempts for failed deletions",
     "dry_run": "Preview mode - shows what would be deleted without deleting",
     "meow_mode": "off = normal delete, edit_and_delete = edit to 'Meow Meow Meow Meow' then delete, edit_only = edit to meows and leave standing"
