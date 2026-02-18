@@ -232,10 +232,10 @@ Paracord detects ghosts (404 response on delete) and skips the normal delete del
 Meow mode overwrites every message's content with a bold, multi-line meow before (optionally) deleting it:
 
 ```
-**Meow, Meow.**
-**Meow, Meow.**
-**Meow, Meow.**
-**Meow, Meow.**
+**MEOW, MEOW.**
+**MEOW, MEOW.**
+**MEOW, MEOW.**
+**MEOW, MEOW.**
 ```
 
 This is useful as a belt-and-suspenders approach: even if a deletion fails or you choose to leave messages standing, the original text is gone.
@@ -290,7 +290,7 @@ Or set it in your config:
 }
 ```
 
-The `--skip-meowed` CLI flag overrides the config setting. Messages are matched by exact content against the meow format (`**Meow, Meow.**` x4 lines).
+The `--skip-meowed` CLI flag overrides the config setting. Messages are matched by exact content against the meow format (`**MEOW, MEOW.**` x4 lines).
 
 ## Time Estimates
 

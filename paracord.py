@@ -35,7 +35,7 @@ except ImportError:
     print("Install it with: pip3 install requests")
     sys.exit(1)
 
-__version__ = "3.4.0"
+__version__ = "3.4.1"
 
 # Console colors (ANSI escape codes, works on most terminals)
 class Colors:
@@ -54,8 +54,8 @@ DISCORD_API_BASE = "https://discord.com/api/v9"
 PROGRESS_FILE = ".paracord_progress.json"
 LOG_FILE = "paracord.log"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-MEOW_TEXT = "**Meow, Meow.**\n**Meow, Meow.**\n**Meow, Meow.**\n**Meow, Meow.**"
-MEOW_LABEL = "**Meow, Meow.** (x4)"  # Short display label for terminal output
+MEOW_TEXT = "**MEOW, MEOW.**\n**MEOW, MEOW.**\n**MEOW, MEOW.**\n**MEOW, MEOW.**"
+MEOW_LABEL = "**MEOW, MEOW.** (x4)"  # Short display label for terminal output
 MEOW_MODES = ("off", "edit_and_delete", "edit_only")
 
 class ProgressBar:
