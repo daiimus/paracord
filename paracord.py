@@ -35,7 +35,7 @@ except ImportError:
     print("Install it with: pip3 install requests")
     sys.exit(1)
 
-__version__ = "3.2.0"
+__version__ = "3.3.0"
 
 # Console colors (ANSI escape codes, works on most terminals)
 class Colors:
@@ -54,8 +54,15 @@ DISCORD_API_BASE = "https://discord.com/api/v9"
 PROGRESS_FILE = ".paracord_progress.json"
 LOG_FILE = "paracord.log"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-MEOW_TEXT = "Meow Meow Meow Meow"
+MEOW_TEXT = "**Meow, Meow.**\n**Meow, Meow.**\n**Meow, Meow.**\n**Meow, Meow.**"
+MEOW_TEXT_LEGACY = "Meow Meow Meow Meow"
+MEOW_LABEL = "**Meow, Meow.** (x4)"  # Short display label for terminal output
 MEOW_MODES = ("off", "edit_and_delete", "edit_only")
+
+
+def is_meowed(content: str) -> bool:
+    """Check if a message has been meowed (current or legacy format)."""
+    return content == MEOW_TEXT or content == MEOW_TEXT_LEGACY
 
 class ProgressBar:
     """Simple progress bar for terminal display"""
@@ -626,7 +633,7 @@ class Paracord:
                         if self.config['settings']['skip_pinned'] and msg.get('pinned'):
                             continue
                         # Skip meowed messages if configured
-                        if self.config['settings'].get('skip_meowed') and msg.get('content') == MEOW_TEXT:
+                        if self.config['settings'].get('skip_meowed') and is_meowed(msg.get('content', '')):
                             continue
                         messages.append(msg)
             
@@ -705,7 +712,7 @@ class Paracord:
                     was_ghost = False
                     if meow_mode != 'off':
                         # Skip edit if message is already meowed
-                        if msg.get('content') != MEOW_TEXT:
+                        if not is_meowed(msg.get('content', '')):
                             edit_success = False
                             for attempt in range(1, max_retries + 1):
                                 edit_result = self.edit_message(channel_id, message_id, MEOW_TEXT, attempt)
@@ -865,7 +872,7 @@ class Paracord:
         print(f"  Delete delay: {config['settings']['delete_delay']}s")
         print(f"  Skip pinned: {config['settings']['skip_pinned']}")
         if config['settings'].get('skip_meowed'):
-            print(f"  Skip meowed: {Colors.YELLOW}True{Colors.ENDC} (messages containing \"{MEOW_TEXT}\" will be preserved)")
+            print(f"  Skip meowed: {Colors.YELLOW}True{Colors.ENDC} (meowed messages will be preserved)")
         
         meow_mode = config['settings'].get('meow_mode', 'off')
         if meow_mode != 'off':
@@ -877,9 +884,9 @@ class Paracord:
         # Confirm
         if not dry_run and not skip_confirm:
             if meow_mode == 'edit_only':
-                action_desc = f"edit messages to \"{MEOW_TEXT}\" in"
+                action_desc = f"edit messages to \"{MEOW_LABEL}\" in"
             elif meow_mode == 'edit_and_delete':
-                action_desc = f"edit messages to \"{MEOW_TEXT}\" then delete them from"
+                action_desc = f"edit messages to \"{MEOW_LABEL}\" then delete them from"
             else:
                 action_desc = "delete messages from"
             print(f"\n{Colors.YELLOW}This will {action_desc} {len(targets)} channels/DMs.{Colors.ENDC}")
@@ -969,7 +976,7 @@ Examples:
   # Skip confirmation prompt
   python3 paracord.py --config config.json --yes
   
-  # Meow mode: edit all messages to "Meow Meow Meow Meow" then delete
+  # Meow mode: edit all messages to "**Meow, Meow.**" (x4) then delete
   python3 paracord.py --config config.json --meow
   
    # Meow mode: edit only (leave messages standing as meows)
@@ -990,10 +997,10 @@ Examples:
     parser.add_argument('--yes', '-y', action='store_true', help='Skip confirmation prompt')
     parser.add_argument('--meow', nargs='?', const='edit_and_delete', default=None,
                         choices=['edit_and_delete', 'edit_only'],
-                        help='Meow mode: edit messages to "Meow Meow Meow Meow" before deleting. '
+                        help='Meow mode: edit messages to bold "**Meow, Meow.**" (x4 lines) before deleting. '
                              'Use "edit_only" to leave meowed messages standing (default: edit_and_delete)')
     parser.add_argument('--skip-meowed', action='store_true', default=None,
-                        help='Skip messages already containing "Meow Meow Meow Meow" (preserve meowed messages)')
+                        help='Skip meowed messages (preserve them during deletion passes)')
     
     args = parser.parse_args()
     
