@@ -36,7 +36,7 @@ except ImportError:
     print("Install it with: pip3 install requests")
     sys.exit(1)
 
-__version__ = "3.5.0"
+__version__ = "3.6.0"
 
 # Console colors (ANSI escape codes, works on most terminals)
 class Colors:
@@ -57,7 +57,7 @@ LOG_FILE = "paracord.log"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 MEOW_TEXT = "**MEOW, MEOW.**\n**MEOW, MEOW.**\n**MEOW, MEOW.**\n**MEOW, MEOW.**"
 MEOW_LABEL = "**MEOW, MEOW.** (x4)"  # Short display label for terminal output
-MEOW_MODES = ("off", "edit_and_delete", "edit_only")
+MEOW_MODES = ("off", "edit_and_delete", "edit_only", "react_only")
 MEOW_REACTIONS = ("🐭", "🐁")  # Randomly chosen per message in meow mode
 
 class ProgressBar:
@@ -745,8 +745,12 @@ class Paracord:
             else:
                 # Actually process messages (edit and/or delete)
                 meow_mode = self.config['settings'].get('meow_mode', 'off')
-                if meow_mode != 'off':
-                    prefix_label = 'Meowing' if meow_mode == 'edit_only' else 'Meowing & deleting'
+                if meow_mode == 'react_only':
+                    prefix_label = 'Reacting'
+                elif meow_mode == 'edit_only':
+                    prefix_label = 'Meowing'
+                elif meow_mode == 'edit_and_delete':
+                    prefix_label = 'Meowing & deleting'
                 else:
                     prefix_label = 'Deleting'
                 progress = ProgressBar(len(messages), prefix=prefix_label)
@@ -774,29 +778,36 @@ class Paracord:
                         # Skip if message is already meowed
                         if msg.get('content') != MEOW_TEXT:
                             # React with a random mouse emoji before editing
-                            for attempt in range(1, max_retries + 1):
-                                react_result = self.react_message(channel_id, message_id, attempt)
+                            if meow_mode in ('react_only', 'edit_only', 'edit_and_delete'):
+                                for attempt in range(1, max_retries + 1):
+                                    react_result = self.react_message(channel_id, message_id, attempt)
+                                    
+                                    if react_result == 'OK':
+                                        self.stats['reacted'] += 1
+                                        time.sleep(self.config['settings']['delete_delay'])
+                                        break
+                                    elif react_result == 'GHOST':
+                                        self.stats['ghosts'] += 1
+                                        deleted_in_batch += 1
+                                        was_ghost = True
+                                        break
+                                    elif react_result in ('SKIP', 'FAILED'):
+                                        break
+                                    elif react_result == 'RETRY':
+                                        if attempt < max_retries:
+                                            time.sleep(1)
+                                            continue
+                                        break
                                 
-                                if react_result == 'OK':
-                                    self.stats['reacted'] += 1
-                                    time.sleep(self.config['settings']['delete_delay'])
-                                    break
-                                elif react_result == 'GHOST':
-                                    self.stats['ghosts'] += 1
-                                    deleted_in_batch += 1
-                                    was_ghost = True
-                                    break
-                                elif react_result in ('SKIP', 'FAILED'):
-                                    break
-                                elif react_result == 'RETRY':
-                                    if attempt < max_retries:
-                                        time.sleep(1)
-                                        continue
-                                    break
+                                # If ghost, skip everything (message doesn't exist)
+                                if was_ghost:
+                                    progress.update(i + 1)
+                                    continue
                             
-                            # If ghost, skip everything (message doesn't exist)
-                            if was_ghost:
+                            # In react_only mode, skip edit entirely
+                            if meow_mode == 'react_only':
                                 progress.update(i + 1)
+                                time.sleep(self.config['settings']['delete_delay'])
                                 continue
                             
                             edit_success = False
@@ -830,8 +841,8 @@ class Paracord:
                             if edit_success:
                                 time.sleep(self.config['settings']['delete_delay'])
                     
-                    # In edit_only mode, skip deletion entirely
-                    if meow_mode == 'edit_only':
+                    # In edit_only or react_only mode, skip deletion entirely
+                    if meow_mode in ('edit_only', 'react_only'):
                         progress.update(i + 1)
                         # Still need a delay between edits
                         if not was_ghost:
@@ -903,7 +914,7 @@ class Paracord:
     
     def run_batch(self, config_file: str, dry_run: bool = False, resume: bool = False,
                   skip_confirm: bool = False, meow_mode: Optional[str] = None,
-                  skip_meowed: Optional[bool] = None):
+                  skip_meowed: Optional[bool] = None, react_delay: Optional[int] = None):
         """Run batch deletion from config file"""
         
         print(f"\n{Colors.HEADER}{'='*60}{Colors.ENDC}")
@@ -927,6 +938,12 @@ class Paracord:
             config['settings']['skip_meowed'] = skip_meowed
         # Ensure skip_meowed has a default
         config['settings'].setdefault('skip_meowed', False)
+        
+        # CLI --react-delay flag overrides config file react_delay
+        if react_delay is not None:
+            config['settings']['react_delay'] = react_delay
+        # Ensure react_delay has a default
+        config['settings'].setdefault('react_delay', 0)
         
         # Load token
         self.token = self.load_token()
@@ -961,15 +978,20 @@ class Paracord:
             print(f"  Skip meowed: {Colors.YELLOW}True{Colors.ENDC} (meowed messages will be preserved)")
         
         meow_mode = config['settings'].get('meow_mode', 'off')
+        react_delay_mins = config['settings'].get('react_delay', 0)
         if meow_mode != 'off':
             print(f"  Meow mode: {Colors.YELLOW}{meow_mode}{Colors.ENDC}")
+            if react_delay_mins > 0 and meow_mode in ('edit_only', 'edit_and_delete'):
+                print(f"  React delay: {Colors.YELLOW}{react_delay_mins} min{Colors.ENDC} (react phase → wait → edit phase)")
         
         if dry_run:
             print(f"{Colors.YELLOW}  DRY RUN MODE: No messages will be deleted{Colors.ENDC}")
         
         # Confirm
         if not dry_run and not skip_confirm:
-            if meow_mode == 'edit_only':
+            if meow_mode == 'react_only':
+                action_desc = "react to messages with mouse emoji in"
+            elif meow_mode == 'edit_only':
                 action_desc = f"edit messages to \"{MEOW_LABEL}\" in"
             elif meow_mode == 'edit_and_delete':
                 action_desc = f"edit messages to \"{MEOW_LABEL}\" then delete them from"
@@ -985,17 +1007,72 @@ class Paracord:
         # Start timer
         self.stats['start_time'] = datetime.now()
         
-        # Process targets
-        for i in range(self.current_target_index, len(targets)):
-            if self.should_stop:
-                break
+        # Two-phase react delay: react to all targets first, wait, then edit/delete
+        if react_delay_mins > 0 and meow_mode in ('edit_only', 'edit_and_delete') and not dry_run:
+            # Phase 1: React only
+            original_meow_mode = config['settings']['meow_mode']
+            config['settings']['meow_mode'] = 'react_only'
             
-            target = targets[i]
-            print(f"\n{Colors.BOLD}[{i+1}/{len(targets)}] Processing target...{Colors.ENDC}")
+            print(f"\n{Colors.HEADER}{'='*60}{Colors.ENDC}")
+            print(f"{Colors.HEADER}PHASE 1: REACT{Colors.ENDC}")
+            print(f"{Colors.HEADER}{'='*60}{Colors.ENDC}")
             
-            self.process_target(target, dry_run)
-            self.current_target_index = i + 1
-            self.save_progress()
+            for i in range(self.current_target_index, len(targets)):
+                if self.should_stop:
+                    break
+                
+                target = targets[i]
+                print(f"\n{Colors.BOLD}[{i+1}/{len(targets)}] Processing target...{Colors.ENDC}")
+                
+                self.process_target(target, dry_run)
+                self.current_target_index = i + 1
+                self.save_progress()
+            
+            if not self.should_stop:
+                # Wait for react_delay minutes
+                print(f"\n{Colors.HEADER}{'='*60}{Colors.ENDC}")
+                print(f"{Colors.YELLOW}Mice deployed. Waiting {react_delay_mins} minute{'s' if react_delay_mins != 1 else ''}...{Colors.ENDC}")
+                print(f"{Colors.HEADER}{'='*60}{Colors.ENDC}")
+                
+                for remaining in range(react_delay_mins * 60, 0, -1):
+                    if self.should_stop:
+                        break
+                    mins, secs = divmod(remaining, 60)
+                    print(f"\r{Colors.CYAN}  {mins:02d}:{secs:02d} remaining...{Colors.ENDC}", end='', flush=True)
+                    time.sleep(1)
+                print()  # newline after countdown
+            
+            if not self.should_stop:
+                # Phase 2: Edit (and optionally delete)
+                config['settings']['meow_mode'] = original_meow_mode
+                self.current_target_index = 0  # Reset to process all targets again
+                
+                print(f"\n{Colors.HEADER}{'='*60}{Colors.ENDC}")
+                print(f"{Colors.HEADER}PHASE 2: MEOW{Colors.ENDC}")
+                print(f"{Colors.HEADER}{'='*60}{Colors.ENDC}")
+                
+                for i in range(self.current_target_index, len(targets)):
+                    if self.should_stop:
+                        break
+                    
+                    target = targets[i]
+                    print(f"\n{Colors.BOLD}[{i+1}/{len(targets)}] Processing target...{Colors.ENDC}")
+                    
+                    self.process_target(target, dry_run)
+                    self.current_target_index = i + 1
+                    self.save_progress()
+        else:
+            # Single-phase: process targets normally
+            for i in range(self.current_target_index, len(targets)):
+                if self.should_stop:
+                    break
+                
+                target = targets[i]
+                print(f"\n{Colors.BOLD}[{i+1}/{len(targets)}] Processing target...{Colors.ENDC}")
+                
+                self.process_target(target, dry_run)
+                self.current_target_index = i + 1
+                self.save_progress()
         
         # End timer
         self.stats['end_time'] = datetime.now()
@@ -1064,14 +1141,20 @@ Examples:
   # Skip confirmation prompt
   python3 paracord.py --config config.json --yes
   
-  # Meow mode: edit all messages to "**Meow, Meow.**" (x4) then delete
-  python3 paracord.py --config config.json --meow
-  
-   # Meow mode: edit only (leave messages standing as meows)
-   python3 paracord.py --config config.json --meow edit_only
+   # Meow mode: edit all messages to "**MEOW, MEOW.**" (x4) then delete
+   python3 paracord.py --config config.json --meow
    
-   # Delete all messages except meowed ones (preserve meow'd messages)
-   python3 paracord.py --config config.json --skip-meowed
+    # Meow mode: edit only (leave messages standing as meows)
+    python3 paracord.py --config config.json --meow edit_only
+    
+    # React only: add mouse emoji reactions without editing
+    python3 paracord.py --config config.json --meow react_only
+    
+    # React then meow with a 10 minute delay between phases
+    python3 paracord.py --config config.json --meow edit_only --react-delay 10
+    
+    # Delete all messages except meowed ones (preserve meow'd messages)
+    python3 paracord.py --config config.json --skip-meowed
         """
     )
     
@@ -1084,11 +1167,14 @@ Examples:
     parser.add_argument('--verify-auth', action='store_true', help='Verify token and exit')
     parser.add_argument('--yes', '-y', action='store_true', help='Skip confirmation prompt')
     parser.add_argument('--meow', nargs='?', const='edit_and_delete', default=None,
-                        choices=['edit_and_delete', 'edit_only'],
-                        help='Meow mode: edit messages to bold "**Meow, Meow.**" (x4 lines) before deleting. '
-                             'Use "edit_only" to leave meowed messages standing (default: edit_and_delete)')
+                        choices=['edit_and_delete', 'edit_only', 'react_only'],
+                        help='Meow mode: edit messages to bold "**MEOW, MEOW.**" (x4 lines) before deleting. '
+                             'Use "edit_only" to leave meowed messages standing. '
+                             'Use "react_only" to add mouse emoji reactions only (default: edit_and_delete)')
     parser.add_argument('--skip-meowed', action='store_true', default=None,
                         help='Skip meowed messages (preserve them during deletion passes)')
+    parser.add_argument('--react-delay', type=int, default=None, metavar='MINUTES',
+                        help='Minutes to wait between react and edit phases in meow mode (default: 0)')
     
     args = parser.parse_args()
     
@@ -1128,7 +1214,7 @@ Examples:
     if args.config:
         paracord.run_batch(args.config, dry_run=args.dry_run, resume=args.resume,
                            skip_confirm=args.yes, meow_mode=args.meow,
-                           skip_meowed=args.skip_meowed)
+                           skip_meowed=args.skip_meowed, react_delay=args.react_delay)
         sys.exit(0)
     
     # No action specified
