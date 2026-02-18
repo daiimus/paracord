@@ -20,13 +20,14 @@ import argparse
 import json
 import logging
 import os
+import random
 import signal
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 try:
     import requests
@@ -35,7 +36,7 @@ except ImportError:
     print("Install it with: pip3 install requests")
     sys.exit(1)
 
-__version__ = "3.4.1"
+__version__ = "3.5.0"
 
 # Console colors (ANSI escape codes, works on most terminals)
 class Colors:
@@ -57,6 +58,7 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 MEOW_TEXT = "**MEOW, MEOW.**\n**MEOW, MEOW.**\n**MEOW, MEOW.**\n**MEOW, MEOW.**"
 MEOW_LABEL = "**MEOW, MEOW.** (x4)"  # Short display label for terminal output
 MEOW_MODES = ("off", "edit_and_delete", "edit_only")
+MEOW_REACTIONS = ("🐭", "🐁")  # Randomly chosen per message in meow mode
 
 class ProgressBar:
     """Simple progress bar for terminal display"""
@@ -95,6 +97,7 @@ class Paracord:
         self.stats = {
             'deleted': 0,
             'edited': 0,
+            'reacted': 0,
             'failed': 0,
             'skipped': 0,
             'rate_limited': 0,
@@ -550,6 +553,69 @@ class Paracord:
             self.logger.error(f"Edit request failed: {e}")
             return 'RETRY' if attempt < 3 else 'FAILED'
     
+    def react_message(self, channel_id: str, message_id: str,
+                      attempt: int = 1) -> str:
+        """Add a random mouse emoji reaction to a message.
+        
+        Randomly picks between 🐭 (:mouse:) and 🐁 (:mouse2:).
+        Used in meow mode to tag messages before overwriting.
+        
+        Returns:
+            'OK'     - Successfully reacted
+            'GHOST'  - Message doesn't exist (404)
+            'SKIP'   - Cannot react (archived thread, no permissions)
+            'RETRY'  - Rate limited, should retry
+            'FAILED' - Permanent failure
+        """
+        
+        emoji = random.choice(MEOW_REACTIONS)
+        # URL-encode the emoji for the REST endpoint
+        encoded_emoji = quote(emoji)
+        url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}/reactions/{encoded_emoji}/%40me"
+        
+        try:
+            response = self.session.put(url, timeout=10)
+            
+            if response.status_code in (200, 204):
+                return 'OK'
+            
+            elif response.status_code == 429:
+                retry_after = response.json().get('retry_after', 3)
+                wait_time = retry_after * 2
+                self.stats['rate_limited'] += 1
+                self.logger.warning(f"Rate limited on react, waiting {wait_time}s (retry_after={retry_after}s)")
+                print(f"{Colors.YELLOW}Rate limited - waiting {wait_time}s...{Colors.ENDC}")
+                time.sleep(wait_time)
+                return 'RETRY'
+            
+            elif response.status_code == 404:
+                self.logger.debug(f"Message {message_id} not found for react (ghost)")
+                return 'GHOST'
+            
+            elif response.status_code == 400:
+                try:
+                    error_data = response.json()
+                    if error_data.get('code') == 50083:
+                        self.logger.warning(f"Message {message_id} in archived thread, cannot react")
+                        return 'SKIP'
+                except (ValueError, KeyError):
+                    pass
+                self.logger.error(f"React failed with status 400: {response.text}")
+                return 'FAILED'
+            
+            elif response.status_code == 403:
+                error_data = response.json()
+                self.logger.warning(f"Cannot react to message {message_id}: {error_data}")
+                return 'SKIP'
+            
+            else:
+                self.logger.error(f"React failed with status {response.status_code}: {response.text}")
+                return 'FAILED'
+        
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"React request failed: {e}")
+            return 'RETRY' if attempt < 3 else 'FAILED'
+    
     def process_target(self, target: Dict, dry_run: bool = False):
         """Process a single channel/DM target using cursor-based pagination.
         
@@ -705,6 +771,32 @@ class Paracord:
                     # Meow mode: edit message content before deletion
                     was_ghost = False
                     if meow_mode != 'off':
+                        # React with a random mouse emoji before editing
+                        for attempt in range(1, max_retries + 1):
+                            react_result = self.react_message(channel_id, message_id, attempt)
+                            
+                            if react_result == 'OK':
+                                self.stats['reacted'] += 1
+                                time.sleep(self.config['settings']['delete_delay'])
+                                break
+                            elif react_result == 'GHOST':
+                                self.stats['ghosts'] += 1
+                                deleted_in_batch += 1
+                                was_ghost = True
+                                break
+                            elif react_result in ('SKIP', 'FAILED'):
+                                break
+                            elif react_result == 'RETRY':
+                                if attempt < max_retries:
+                                    time.sleep(1)
+                                    continue
+                                break
+                        
+                        # If ghost, skip everything (message doesn't exist)
+                        if was_ghost:
+                            progress.update(i + 1)
+                            continue
+                        
                         # Skip edit if message is already meowed
                         if msg.get('content') != MEOW_TEXT:
                             edit_success = False
@@ -938,6 +1030,8 @@ class Paracord:
         print(f"{Colors.BOLD}Duration:{Colors.ENDC} {hours}h {minutes}m {seconds}s")
         if self.stats['edited']:
             print(f"{Colors.YELLOW}Edited (meowed):{Colors.ENDC} {self.stats['edited']}")
+        if self.stats['reacted']:
+            print(f"{Colors.YELLOW}Reacted:{Colors.ENDC} {self.stats['reacted']}")
         print(f"{Colors.GREEN}Deleted:{Colors.ENDC} {self.stats['deleted']}")
         print(f"{Colors.YELLOW}Ghosts:{Colors.ENDC} {self.stats['ghosts']} (already-deleted stale index entries)")
         print(f"{Colors.YELLOW}Skipped:{Colors.ENDC} {self.stats['skipped']}")

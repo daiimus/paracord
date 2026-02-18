@@ -240,6 +240,8 @@ Meow mode overwrites every message's content with a bold, multi-line meow before
 
 This is useful as a belt-and-suspenders approach: even if a deletion fails or you choose to leave messages standing, the original text is gone.
 
+Each message also gets a random mouse emoji reaction (🐭 or 🐁) before being edited, leaving a visible tag even on messages that were already meowed.
+
 ### Modes
 
 | Mode | Behavior |
@@ -268,7 +270,7 @@ Or set it in your config.json:
 
 The `--meow` CLI flag overrides whatever is in the config file. Messages that are already meowed are skipped on subsequent passes.
 
-**Note:** Meow mode roughly doubles the API calls per message (one PATCH + one DELETE), so expect ~2x the runtime compared to normal deletion. The same rate limit handling applies.
+**Note:** Meow mode adds extra API calls per message (react + PATCH, plus DELETE if not edit_only), so expect longer runtimes compared to normal deletion. The same rate limit handling applies.
 
 ### Preserving Meowed Messages
 
