@@ -35,7 +35,7 @@ except ImportError:
     print("Install it with: pip3 install requests")
     sys.exit(1)
 
-__version__ = "3.3.0"
+__version__ = "3.4.0"
 
 # Console colors (ANSI escape codes, works on most terminals)
 class Colors:
@@ -55,14 +55,8 @@ PROGRESS_FILE = ".paracord_progress.json"
 LOG_FILE = "paracord.log"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 MEOW_TEXT = "**Meow, Meow.**\n**Meow, Meow.**\n**Meow, Meow.**\n**Meow, Meow.**"
-MEOW_TEXT_LEGACY = "Meow Meow Meow Meow"
 MEOW_LABEL = "**Meow, Meow.** (x4)"  # Short display label for terminal output
 MEOW_MODES = ("off", "edit_and_delete", "edit_only")
-
-
-def is_meowed(content: str) -> bool:
-    """Check if a message has been meowed (current or legacy format)."""
-    return content == MEOW_TEXT or content == MEOW_TEXT_LEGACY
 
 class ProgressBar:
     """Simple progress bar for terminal display"""
@@ -633,7 +627,7 @@ class Paracord:
                         if self.config['settings']['skip_pinned'] and msg.get('pinned'):
                             continue
                         # Skip meowed messages if configured
-                        if self.config['settings'].get('skip_meowed') and is_meowed(msg.get('content', '')):
+                        if self.config['settings'].get('skip_meowed') and msg.get('content') == MEOW_TEXT:
                             continue
                         messages.append(msg)
             
@@ -712,7 +706,7 @@ class Paracord:
                     was_ghost = False
                     if meow_mode != 'off':
                         # Skip edit if message is already meowed
-                        if not is_meowed(msg.get('content', '')):
+                        if msg.get('content') != MEOW_TEXT:
                             edit_success = False
                             for attempt in range(1, max_retries + 1):
                                 edit_result = self.edit_message(channel_id, message_id, MEOW_TEXT, attempt)
