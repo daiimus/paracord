@@ -771,34 +771,34 @@ class Paracord:
                     # Meow mode: edit message content before deletion
                     was_ghost = False
                     if meow_mode != 'off':
-                        # React with a random mouse emoji before editing
-                        for attempt in range(1, max_retries + 1):
-                            react_result = self.react_message(channel_id, message_id, attempt)
-                            
-                            if react_result == 'OK':
-                                self.stats['reacted'] += 1
-                                time.sleep(self.config['settings']['delete_delay'])
-                                break
-                            elif react_result == 'GHOST':
-                                self.stats['ghosts'] += 1
-                                deleted_in_batch += 1
-                                was_ghost = True
-                                break
-                            elif react_result in ('SKIP', 'FAILED'):
-                                break
-                            elif react_result == 'RETRY':
-                                if attempt < max_retries:
-                                    time.sleep(1)
-                                    continue
-                                break
-                        
-                        # If ghost, skip everything (message doesn't exist)
-                        if was_ghost:
-                            progress.update(i + 1)
-                            continue
-                        
-                        # Skip edit if message is already meowed
+                        # Skip if message is already meowed
                         if msg.get('content') != MEOW_TEXT:
+                            # React with a random mouse emoji before editing
+                            for attempt in range(1, max_retries + 1):
+                                react_result = self.react_message(channel_id, message_id, attempt)
+                                
+                                if react_result == 'OK':
+                                    self.stats['reacted'] += 1
+                                    time.sleep(self.config['settings']['delete_delay'])
+                                    break
+                                elif react_result == 'GHOST':
+                                    self.stats['ghosts'] += 1
+                                    deleted_in_batch += 1
+                                    was_ghost = True
+                                    break
+                                elif react_result in ('SKIP', 'FAILED'):
+                                    break
+                                elif react_result == 'RETRY':
+                                    if attempt < max_retries:
+                                        time.sleep(1)
+                                        continue
+                                    break
+                            
+                            # If ghost, skip everything (message doesn't exist)
+                            if was_ghost:
+                                progress.update(i + 1)
+                                continue
+                            
                             edit_success = False
                             for attempt in range(1, max_retries + 1):
                                 edit_result = self.edit_message(channel_id, message_id, MEOW_TEXT, attempt)
