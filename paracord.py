@@ -36,7 +36,7 @@ except ImportError:
     print("Install it with: pip3 install requests")
     sys.exit(1)
 
-__version__ = "3.6.0"
+__version__ = "3.7.0"
 
 # Console colors (ANSI escape codes, works on most terminals)
 class Colors:
@@ -508,7 +508,7 @@ class Paracord:
         """
         
         url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
-        payload = {'content': content}
+        payload = {'content': content, 'attachments': [], 'embeds': []}
         
         try:
             response = self.session.patch(url, json=payload, timeout=10)
