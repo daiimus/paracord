@@ -126,6 +126,7 @@ class Paracord:
         # File handler (restricted permissions: owner read/write only)
         # Create/open log file with 0600 permissions
         fd = os.open(LOG_FILE, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        os.fchmod(fd, 0o600)
         log_stream = os.fdopen(fd, 'a')
         file_handler = logging.StreamHandler(log_stream)
         file_handler.setLevel(logging.DEBUG)
@@ -1104,6 +1105,7 @@ class Paracord:
         }
         
         fd = os.open(PROGRESS_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.fchmod(fd, 0o600)
         with os.fdopen(fd, 'w') as f:
             json.dump(progress, f, indent=2)
         
