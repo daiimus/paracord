@@ -36,7 +36,7 @@ except ImportError:
     print("Install it with: pip3 install requests")
     sys.exit(1)
 
-__version__ = "3.7.0"
+__version__ = "3.8.0"
 
 # Console colors (ANSI escape codes, works on most terminals)
 class Colors:
@@ -123,8 +123,11 @@ class Paracord:
         log_format = '%(asctime)s [%(levelname)s] %(message)s'
         date_format = '%Y-%m-%d %H:%M:%S'
         
-        # File handler
-        file_handler = logging.FileHandler(LOG_FILE, mode='a')
+        # File handler (restricted permissions: owner read/write only)
+        # Create/open log file with 0600 permissions
+        fd = os.open(LOG_FILE, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        log_stream = os.fdopen(fd, 'a')
+        file_handler = logging.StreamHandler(log_stream)
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(logging.Formatter(log_format, date_format))
         
@@ -214,7 +217,7 @@ class Paracord:
                 else:
                     print(f"  Logged in as: @{username} (ID: {user_id})")
                 
-                self.logger.info(f"Token validated for user: {username} ({user_id})")
+                self.logger.info("Token validated successfully")
                 return True, user_id
             
             elif response.status_code == 401:
@@ -410,30 +413,39 @@ class Paracord:
         if max_id is not None:
             params['max_id'] = max_id
         
-        self.logger.debug(f"Searching messages: {url}?{urlencode(params)}")
+        self.logger.debug(f"Searching messages: {urlencode(params)}")
         
-        response = self.session.get(url, params=params, timeout=30)
+        max_index_retries = 10  # Cap 202 retries to avoid infinite loop
+        index_attempts = 0
         
-        # Handle rate limiting with dynamic backoff
-        if response.status_code == 429:
-            retry_after = response.json().get('retry_after', 40)
-            wait_time = retry_after * 2
-            self.stats['rate_limited'] += 1
-            self.logger.warning(f"Rate limited on search, waiting {wait_time}s (retry_after={retry_after}s)")
-            print(f"{Colors.YELLOW}Rate limited - waiting {wait_time}s...{Colors.ENDC}")
-            time.sleep(wait_time)
-            return self.search_messages(guild_id, channel_id, offset, max_id)
-        
-        # Handle channel not indexed
-        if response.status_code == 202:
-            retry_after = response.json().get('retry_after', 5)
-            self.logger.info(f"Channel not indexed, waiting {retry_after}s")
-            print(f"{Colors.YELLOW}Channel being indexed, waiting {retry_after}s...{Colors.ENDC}")
-            time.sleep(retry_after)
-            return self.search_messages(guild_id, channel_id, offset, max_id)
-        
-        response.raise_for_status()
-        return response.json()
+        while True:
+            response = self.session.get(url, params=params, timeout=30)
+            
+            # Handle rate limiting with dynamic backoff (retry indefinitely)
+            if response.status_code == 429:
+                retry_after = response.json().get('retry_after', 40)
+                wait_time = retry_after * 2
+                self.stats['rate_limited'] += 1
+                self.logger.warning(f"Rate limited on search, waiting {wait_time}s (retry_after={retry_after}s)")
+                print(f"{Colors.YELLOW}Rate limited - waiting {wait_time}s...{Colors.ENDC}")
+                time.sleep(wait_time)
+                continue
+            
+            # Handle channel not indexed (cap retries)
+            if response.status_code == 202:
+                index_attempts += 1
+                if index_attempts >= max_index_retries:
+                    self.logger.warning(f"Channel still not indexed after {max_index_retries} attempts, giving up")
+                    print(f"{Colors.YELLOW}Channel not indexed after {max_index_retries} attempts, skipping...{Colors.ENDC}")
+                    return {'total_results': 0, 'messages': []}
+                retry_after = response.json().get('retry_after', 5)
+                self.logger.info(f"Channel not indexed, waiting {retry_after}s (attempt {index_attempts}/{max_index_retries})")
+                print(f"{Colors.YELLOW}Channel being indexed, waiting {retry_after}s...{Colors.ENDC}")
+                time.sleep(retry_after)
+                continue
+            
+            response.raise_for_status()
+            return response.json()
     
     def delete_message(self, channel_id: str, message_id: str, attempt: int = 1) -> str:
         """Delete a single message.
@@ -493,7 +505,8 @@ class Paracord:
         
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Delete request failed: {e}")
-            return 'RETRY' if attempt < 3 else 'FAILED'
+            max_retries = self.config['settings'].get('max_retries', 3)
+            return 'RETRY' if attempt < max_retries else 'FAILED'
     
     def edit_message(self, channel_id: str, message_id: str, content: str,
                      attempt: int = 1) -> str:
@@ -551,7 +564,8 @@ class Paracord:
         
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Edit request failed: {e}")
-            return 'RETRY' if attempt < 3 else 'FAILED'
+            max_retries = self.config['settings'].get('max_retries', 3)
+            return 'RETRY' if attempt < max_retries else 'FAILED'
     
     def react_message(self, channel_id: str, message_id: str,
                       attempt: int = 1) -> str:
@@ -614,7 +628,8 @@ class Paracord:
         
         except requests.exceptions.RequestException as e:
             self.logger.error(f"React request failed: {e}")
-            return 'RETRY' if attempt < 3 else 'FAILED'
+            max_retries = self.config['settings'].get('max_retries', 3)
+            return 'RETRY' if attempt < max_retries else 'FAILED'
     
     def process_target(self, target: Dict, dry_run: bool = False):
         """Process a single channel/DM target using cursor-based pagination.
@@ -733,9 +748,9 @@ class Paracord:
                 # Just preview
                 print(f"\n{Colors.YELLOW}[DRY RUN] Would delete:{Colors.ENDC}")
                 for msg in messages[:5]:
-                    content = msg.get('content', '[no content]')[:50]
+                    content = msg.get('content', '')
                     timestamp = msg.get('timestamp', 'unknown')[:10]
-                    print(f"  - {timestamp}: {content}")
+                    print(f"  - {timestamp}: [{len(content)} chars]")
                 if len(messages) > 5:
                     print(f"  ... and {len(messages) - 5} more")
                 # Advance cursor past this batch
@@ -945,15 +960,7 @@ class Paracord:
         # Ensure react_delay has a default
         config['settings'].setdefault('react_delay', 0)
         
-        # Load token
-        self.token = self.load_token()
-        
-        # Validate token
-        valid, user_id = self.validate_token()
-        if not valid:
-            sys.exit(1)
-        
-        self.author_id = user_id
+        # Token and author_id already set by main()
         
         # Load progress if resuming
         if resume and Path(PROGRESS_FILE).exists():
@@ -1082,14 +1089,23 @@ class Paracord:
     
     def save_progress(self):
         """Save current progress to file"""
+        # Serialize stats with datetimes converted to ISO strings
+        serializable_stats = {}
+        for key, value in self.stats.items():
+            if isinstance(value, datetime):
+                serializable_stats[key] = value.isoformat()
+            else:
+                serializable_stats[key] = value
+        
         progress = {
             'current_target_index': self.current_target_index,
-            'stats': self.stats,
+            'stats': serializable_stats,
             'timestamp': datetime.now().isoformat()
         }
         
-        with open(PROGRESS_FILE, 'w') as f:
-            json.dump(progress, f, indent=2, default=str)
+        fd = os.open(PROGRESS_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w') as f:
+            json.dump(progress, f, indent=2)
         
         self.logger.info(f"Progress saved: target {self.current_target_index}")
     
